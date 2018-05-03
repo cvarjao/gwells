@@ -173,6 +173,7 @@ _stage('Code Quality', context) {
             }
             dir('sonar-runner') {
                 unstash 'coverage'
+                sh './gradlew -q dependencies'
                 sh returnStdout: true, script: "./gradlew sonarqube -Dsonar.host.url=${SONARQUBE_URL} -Dsonar.verbose=true --stacktrace --info  -Dsonar.sources=.."
             }
         }
@@ -345,7 +346,7 @@ for(String envKeyName: context.env.keySet() as String[]){
                     //}
                     dir('functional-tests') {
                         try {
-
+                            sh './gradlew -q dependencies'
                             if ("DEV".equalsIgnoreCase(stageDeployName)){
                                 sh './gradlew chromeHeadlessTest'
                             }else{
