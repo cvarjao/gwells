@@ -6,6 +6,10 @@
     otherwise,there is some configuration caching that won't actually take the latest configuration
     e.g.: Changing image, envvars, so on.
     maybe only when overwriting global templates?
+
+References:
+- https://gist.github.com/matthiasbalke/3c9ecccbea1d460ee4c3fbc5843ede4a
+
 */
 
 import hudson.model.Result;
@@ -106,11 +110,12 @@ _stage('Unit Test', context) {
             try {
                 container('app') {
                     sh script: '''#!/usr/bin/container-entrypoint /bin/sh
-                    set +x
-                    pwd
+                    set -x
                     python --version
-                    npm --version
                     pip --version
+                    node --version
+                    npm --version
+
                     (cd /opt/app-root/src && python manage.py migrate)
                     (cd /opt/app-root/src && export ENABLE_DATA_ENTRY="True" && export NOSE_PROCESSES=4 && python manage.py test -c nose.cfg)
                     (cd /opt/app-root/src/frontend && npm test)
@@ -119,7 +124,6 @@ _stage('Unit Test', context) {
                     cp /opt/app-root/src/nosetests.xml ./
                     cp /opt/app-root/src/coverage.xml ./
                     cp /opt/app-root/src/frontend/junit.xml ./frontend/
-                    find . -type f -ls
                     ''', returnStatus: true
                 }
             } finally {
