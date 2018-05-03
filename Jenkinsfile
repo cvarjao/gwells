@@ -198,8 +198,9 @@ for(String envKeyName: context.env.keySet() as String[]){
 
     if (!"DEV".equalsIgnoreCase(stageDeployName) && isCD){
         stage("Approve - ${stageDeployName}") {
+            def inputResponse = null;
             try{
-                def inputResponse = input(id: "deploy_${stageDeployName.toLowerCase()}", message: "Deploy to ${stageDeployName}?", ok: 'Approve', submitterParameter: 'approved_by')
+                inputResponse = input(id: "deploy_${stageDeployName.toLowerCase()}", message: "Deploy to ${stageDeployName}?", ok: 'Approve', submitterParameter: 'approved_by')
             }catch(ex){
                 error "Pipeline has been aborted. - ${ex}"
             }
