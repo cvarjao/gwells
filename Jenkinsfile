@@ -401,3 +401,5 @@ stage('Cleanup') {
     new OpenShiftHelper().cleanup(this, context)
     GitHubHelper.mergeAndClosePullRequest(this)
 }
+
+
