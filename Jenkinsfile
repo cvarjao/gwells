@@ -382,9 +382,14 @@ for(String envKeyName: context.env.keySet() as String[]){
 
 
 stage('Cleanup') {
-    def inputResponse=input(id: 'close_pr', message: "Ready to Accept/Merge, and Close pull-request #${env.CHANGE_ID}?", ok: 'Yes', submitter: 'authenticated', submitterParameter: 'approver')
-    echo "inputResponse:${inputResponse}"
+    def inputResponse = null
+    try{
+        inputResponse=input(id: 'close_pr', message: "Ready to Accept/Merge, and Close pull-request #${env.CHANGE_ID}?", ok: 'Yes', submitter: 'authenticated', submitterParameter: 'approver')
+    }catch(ex){
+        error "Pipeline has been aborted. - ${ex}"
+    }
 
+    echo "inputResponse:${inputResponse}"
     new OpenShiftHelper().cleanup(this, context)
     GitHubHelper.mergeAndClosePullRequest(this)
 }
