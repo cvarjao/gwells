@@ -91,53 +91,56 @@ _stage('Build', context) {
     }
 } //end stage
 
-_stage('Unit Test', context) {
-    podTemplate(label: "pythonnodejs-${context.uuid}", name: "pythonnodejs-${context.uuid}", serviceAccount: 'jenkins', cloud: 'openshift', containers: [
-    containerTemplate(
-        name: 'jnlp',
-        image: '172.50.0.2:5000/openshift/jenkins-slave-python3nodejs',
-        resourceRequestCpu: '4000m',
-        resourceLimitCpu: '4000m',
-        resourceRequestMemory: '1Gi',
-        resourceLimitMemory: '4Gi',
-        workingDir: '/tmp',
-        command: '',
-        args: '${computer.jnlpmac} ${computer.name}'
-    )
-    ])
-    {
-        node("pythonnodejs-${context.uuid}") {
-            checkout scm
-            dir ('app'){
-                try {
-                    sh 'pip install --upgrade pip'
-                    sh 'pip install -r requirements.txt'
-                    sh 'cd frontend && npm install'
-                    sh 'cd frontend && npm run build'
-                    sh 'python manage.py collectstatic && python manage.py migrate'
-                    sh 'export ENABLE_DATA_ENTRY="True" && export NOSE_PROCESSES=4 && python manage.py test -c nose.cfg'
-                    sh 'cd frontend && npm test'
-                }
-                finally {
-                    archiveArtifacts allowEmptyArchive: true, artifacts: 'frontend/test/unit/**/*'
-                    stash includes: 'nosetests.xml,coverage.xml', name: 'coverage'
-                    stash includes: 'frontend/test/unit/coverage/clover.xml', name: 'nodecoverage'
-                    stash includes: 'frontend/junit.xml', name: 'nodejunit'
-                    junit 'nosetests.xml,frontend/junit.xml'
-                    publishHTML (target: [
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: false,
-                        keepAll: true,
-                        reportDir: 'frontend/test/unit/coverage/lcov-report/',
-                        reportFiles: 'index.html',
-                        reportName: "Node Coverage Report"
-                    ])
-                }
-            }
-        } //end node
 
-    }// end podTemplate
+_stage('Unit Test', context) {
+    podTemplate(label: "node-${context.uuid}", name:"node-${context.uuid}", serviceAccount: 'jenkins', cloud: 'openshift', containers: [
+        containerTemplate(name: 'jnlp', image: 'jenkins/jnlp-slave:3.10-1-alpine', args: '${computer.jnlpmac} ${computer.name}', resourceRequestCpu: '100m',resourceLimitCpu: '1000m'),
+        containerTemplate(name: 'app', image: "172.50.0.2:5000/csnr-devops-lab-tools/gwells${context.buildNameSuffix}:${context.buildEnvName}", ttyEnabled: true, command: 'cat',
+            resourceRequestCpu: '1000m',
+            resourceLimitCpu: '4000m',
+            resourceRequestMemory: '1Gi',
+            resourceLimitMemory: '4Gi')
+      ]
+    ) {
+        node("node-${context.uuid}") {
+            try {
+                container('app') {
+                    sh script: '''#!/usr/bin/container-entrypoint /bin/sh
+                    set +x
+                    pwd
+                    python --version
+                    npm --version
+                    pip --version
+                    (cd /opt/app-root/src && python manage.py migrate)
+                    (cd /opt/app-root/src && export ENABLE_DATA_ENTRY="True" && export NOSE_PROCESSES=4 && python manage.py test -c nose.cfg)
+                    (cd /opt/app-root/src/frontend && npm test)
+                    mkdir -p frontend/test/
+                    cp -R /opt/app-root/src/frontend/test/unit ./frontend/test/
+                    cp /opt/app-root/src/nosetests.xml ./
+                    cp /opt/app-root/src/coverage.xml ./
+                    cp /opt/app-root/src/frontend/junit.xml ./frontend/
+                    find . -type f -ls
+                    ''', returnStatus: true
+                }
+            } finally {
+                archiveArtifacts allowEmptyArchive: true, artifacts: 'frontend/test/unit/**/*'
+                stash includes: 'nosetests.xml,coverage.xml', name: 'coverage'
+                stash includes: 'frontend/test/unit/coverage/clover.xml', name: 'nodecoverage'
+                stash includes: 'frontend/junit.xml', name: 'nodejunit'
+                junit 'nosetests.xml,frontend/junit.xml'
+                publishHTML (target: [
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: false,
+                    keepAll: true,
+                    reportDir: 'frontend/test/unit/coverage/lcov-report/',
+                    reportFiles: 'index.html',
+                    reportName: "Node Coverage Report"
+                ])
+            }
+        }
+    }
 } //end stage
+
 
 
 _stage('Code Quality', context) {
