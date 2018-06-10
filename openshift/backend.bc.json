@@ -26,10 +26,13 @@
             "kind": "ImageStream",
             "apiVersion": "v1",
             "metadata": {
-                "name": "gwells-python-35-rhel7${NAME_SUFFIX}",
+                "name": "gwells-python-35-rhel7",
                 "creationTimestamp": null,
                 "annotations": {
                     "description": "Python Base Image"
+                },
+                "labels": {
+                    "shared": "true"
                 }
             },
             "spec": {
@@ -38,7 +41,7 @@
                 },
                 "tags":[
                     {
-                        "name": "3.5",
+                        "name": "3.5-23",
                         "annotations": null,
                         "from": {
                             "kind": "DockerImage",
@@ -56,10 +59,13 @@
             "kind": "ImageStream",
             "apiVersion": "v1",
             "metadata": {
-                "name": "gwells-python-runtime${NAME_SUFFIX}",
+                "name": "gwells-python-runtime",
                 "creationTimestamp": null,
                 "annotations": {
                     "description": "Python Runtime Image"
+                },
+                "labels": {
+                    "shared": "true"
                 }
             },
             "spec": {
@@ -72,10 +78,11 @@
             "kind": "ImageStream",
             "apiVersion": "v1",
             "metadata": {
-                "name": "gwells${NAME_SUFFIX}",
+                "name": "gwells",
                 "creationTimestamp": null,
                 "labels": {
-                    "base-name":"gwells"
+                    "base-name":"gwells",
+                    "shared": "true"
                 },
                 "annotations": {
                     "description": "Keeps track of changes in the application image"
@@ -92,10 +99,11 @@
             "kind": "ImageStream",
             "apiVersion": "v1",
             "metadata": {
-                "name": "gwells-static${NAME_SUFFIX}",
+                "name": "gwells-static",
                 "creationTimestamp": null,
                 "labels": {
-                    "base-name":"gwells-static"
+                    "base-name":"gwells-static",
+                    "shared": "true"
                 },
                 "annotations": { }
             },
@@ -119,6 +127,7 @@
                 }
             },
             "spec": {
+                "completionDeadlineSeconds": 180,
                 "successfulBuildsHistoryLimit": 3,
                 "failedBuildsHistoryLimit": 3,
                 "triggers": [
@@ -144,21 +153,19 @@
                     "dockerStrategy": {
                         "from": {
                             "kind": "ImageStreamTag",
-                            "name": "gwells-python-35-rhel7${NAME_SUFFIX}:3.5"
+                            "name": "gwells-python-35-rhel7:3.5-23"
                         }
                     }
                 },
                 "output": {
                     "to": {
                         "kind": "ImageStreamTag",
-                        "name": "gwells-python-runtime${NAME_SUFFIX}:${ENV_NAME}"
+                        "name": "gwells-python-runtime:${ENV_NAME}"
                     }
                 },
                 "resources": {},
                 "postCommit": {},
-                "nodeSelector": null,
-                "successfulBuildsHistoryLimit": 5,
-                "failedBuildsHistoryLimit": 5
+                "nodeSelector": null
             }
         },
         {
@@ -172,6 +179,7 @@
                 }
             },
             "spec": {
+                "completionDeadlineSeconds": 600,
                 "successfulBuildsHistoryLimit": 3,
                 "failedBuildsHistoryLimit": 3,
                 "triggers": [
@@ -196,7 +204,7 @@
                     "sourceStrategy": {
                         "from": {
                             "kind": "ImageStreamTag",
-                            "name": "gwells-python-runtime${NAME_SUFFIX}:${ENV_NAME}"
+                            "name": "gwells-python-runtime:${ENV_NAME}"
                         },
                         "env": [
                             {
@@ -224,7 +232,7 @@
                 "output": {
                     "to": {
                         "kind": "ImageStreamTag",
-                        "name": "gwells${NAME_SUFFIX}:${ENV_NAME}"
+                        "name": "gwells:${ENV_NAME}"
                     }
                 },
                 "resources": {
@@ -250,6 +258,7 @@
                 "annotations": { }
             },
             "spec": {
+                "completionDeadlineSeconds": 120,
                 "successfulBuildsHistoryLimit": 3,
                 "failedBuildsHistoryLimit": 3,
                 "triggers": [
@@ -258,7 +267,7 @@
                         "imageChange": {
                             "from": {
                                 "kind": "ImageStreamTag",
-                                "name": "gwells${NAME_SUFFIX}:${ENV_NAME}"
+                                "name": "gwells:${ENV_NAME}"
                             }
                         }
                     },
@@ -273,7 +282,7 @@
                         {
                             "from": {
                                 "kind": "ImageStreamTag",
-                                "name": "gwells${NAME_SUFFIX}:${ENV_NAME}"
+                                "name": "gwells:${ENV_NAME}"
                             },
                             "paths": [
                                 {
@@ -297,7 +306,7 @@
                 "output": {
                     "to": {
                         "kind": "ImageStreamTag",
-                        "name": "gwells-static${NAME_SUFFIX}:${ENV_NAME}"
+                        "name": "gwells-static:${ENV_NAME}"
                     }
                 },
                 "resources": {},
