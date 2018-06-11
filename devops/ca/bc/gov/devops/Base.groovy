@@ -1,6 +1,7 @@
 package ca.bc.gov.devops
 
 import static OpenShiftHelper.oc
+import static OpenShiftHelper.ocProcess
 import static OpenShiftHelper.gitHashAsBlobObject
 import static OpenShiftHelper.getVerboseLevel
 
@@ -46,11 +47,25 @@ abstract class Base extends Script {
         config.app.templates.build.each { template ->
             if (getVerboseLevel() >= 2) println template.file
 
-            List parameterNames = ocProcessParameters(['-f', template.file])
+            //Load Template
+            Map templateObject = new groovy.json.JsonSlurper().parseFile(new File(template.file), 'UTF-8')
+            //Normalize template and calculate hash
+            templateObject.objects.each { it ->
+                it.metadata.labels=it.metadata.labels?:[:]
+                it.metadata.annotations=it.metadata.annotations?:[:]
+                it.metadata.namespace = it.metadata.namespace?:config.app.build.namespace
 
-            List params=[]
+                //Everybody gets a config hash! hooray!
+                it.metadata.labels['hash']= gitHashAsBlobObject(groovy.json.JsonOutput.toJson(it))
+            }
 
-            parameterNames.each { name ->
+            //println templateObject.parameters
+            //List parameterNames = ocProcessParameters(['-f', template.file])
+
+            List params=['-n', config.app.build.namespace]
+
+            templateObject.parameters.each { param ->
+                String name = param.name
                 String value=''
                 if ('NAME_SUFFIX'.equalsIgnoreCase(name)){
                     value=config.app.build.suffix
@@ -58,12 +73,16 @@ abstract class Base extends Script {
                     value=config.app.build.name
                 }else if ('SOURCE_REPOSITORY_URL'.equalsIgnoreCase(name)){
                     value=gitRemoteUri
+                }else if ('SOURCE_REPOSITORY_REF'.equalsIgnoreCase(name)){
+                    value=config.app.git.ref
                 }
                 params.addAll(['-p', "${name}=${value}"])
             }
 
-            Map ocRet=oc(['process', '-f', template.file, '-o', 'json'] + params)
+            Map ocRet=ocProcess(templateObject, params)
             
+            //System.exit(1)
+
             def objects=new groovy.json.JsonSlurper().parseText(ocRet.out.toString())
 
             objects.items.each {
@@ -76,7 +95,7 @@ abstract class Base extends Script {
                     if (!it.spec.completionDeadlineSeconds) println "WARN: Please set ${key(it)}.spec.completionDeadlineSeconds"
                     
                     if (getVerboseLevel() >= 4) println "${it.kind}/${it.metadata.name} - ${it.spec.source.contextDir}"
-                    it.metadata.labels['hash']= gitHashAsBlobObject(groovy.json.JsonOutput.toJson(it))
+                    //it.metadata.labels['hash']= gitHashAsBlobObject(groovy.json.JsonOutput.toJson(it))
 
                     it.metadata.labels['build-config.name'] = it.metadata.name
                     //normalize to explicit namespace references (it makes things easier)
@@ -148,7 +167,9 @@ abstract class Base extends Script {
         }
     } //end applyBuildConfig
 
-
+    String ukey(Map object){
+        return "${object.metadata.namespace}/${object.kind}/${object.metadata.name}"
+    }
 
     String key(Map object){
         return "${object.kind}/${object.metadata.name}"

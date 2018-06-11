@@ -17,6 +17,11 @@
         "required": true
       },
       {
+        "name": "SOURCE_REPOSITORY_REF",
+        "required": false,
+        "value": "master"
+      },
+      {
         "name": "ENV_NAME",
         "required": true
       }
@@ -143,7 +148,7 @@
                 "source": {
                     "contextDir": "docker-images/gwells-python-runtime",
                     "git": {
-                        "ref": "master",
+                        "ref": "${SOURCE_REPOSITORY_REF}",
                         "uri": "${SOURCE_REPOSITORY_URL}"
                     },
                     "type": "Git"
@@ -195,7 +200,7 @@
                     "type": "Git",
                     "git": {
                         "uri": "${SOURCE_REPOSITORY_URL}",
-                        "ref": "master"
+                        "ref": "${SOURCE_REPOSITORY_REF}"
                     },
                     "contextDir": "app"
                 },

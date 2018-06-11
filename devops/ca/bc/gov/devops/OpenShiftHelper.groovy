@@ -2,7 +2,7 @@ package ca.bc.gov.devops
 
 class OpenShiftHelper{
     public static int getVerboseLevel(){
-        return 1
+        return 10
     }
     public static String key(Map object){
         return "${object.kind}/${object.metadata.name}"
@@ -20,6 +20,7 @@ class OpenShiftHelper{
         proc.waitForProcessOutput(stdout, stderr)
         int exitValue= proc.exitValue()
         Map ret = ['out': stdout, 'err': stderr, 'status':exitValue]
+
         return ret
     }
 
@@ -59,6 +60,29 @@ class OpenShiftHelper{
         }
         return null
     }
+
+    public static Map ocProcess(Map template, List args){
+
+        //Map ocRet=oc(['process', '-f', template.file, '-o', 'json'] + params)
+
+        List _args = ['oc', 'process', '-f', '-', '-o', 'json'] + args 
+        String json=new groovy.json.JsonBuilder(template).toPrettyString()
+
+        def proc = _args.execute()
+        OutputStream out = proc.getOutputStream();
+        out.write(json.getBytes());
+        out.flush();
+        out.close();
+
+        Map ret= _exec(proc)
+        ret['cmd'] = _args
+
+        if (ret.status !=0){
+            throw new RuntimeException("oc returned an error code: ${ret}")
+        }
+        return ret
+    }
+
     public static Map ocApply(List items, List args){
         List _args = ['oc', 'apply', '-f', '-'] + args 
         String json=new groovy.json.JsonBuilder(['kind':'List', 'apiVersion':'v1', 'items':items]).toPrettyString()
@@ -70,9 +94,15 @@ class OpenShiftHelper{
         out.close();
 
         Map ret= _exec(proc)
+        ret['cmd'] = _args
+        
+        if (ret.status !=0){
+            throw new RuntimeException("oc returned an error code: ${ret}")
+        }
 
         return ret
     }
+
     public static def toJson(StringBuffer json){
         return toJson(json.toString())
     }

@@ -1,4 +1,6 @@
 
+package ca.bc.gov.devops
+
 import static ca.bc.gov.devops.OpenShiftHelper.key
 import static ca.bc.gov.devops.OpenShiftHelper.oc
 import static ca.bc.gov.devops.OpenShiftHelper.ocGet
@@ -104,14 +106,22 @@ class OpenShiftBuildHelper{
         return false
     }
 
+    boolean isBuidActive(Map build){
+        return 'New' == build.status.phase || 'Pending' == build.status.phase || 'Running' == build.status.phase
+    }
+    boolean isBuidSuccessful(Map build){
+        return 'Complete' == build.status.phase
+    }
     boolean allBuildsSuccessful(List builds){
         //for a list of possible status use: oc explain build.status.phase
+        boolean allComplete = true
         for (Map build:builds){
-            if ('Complete' != build.status.phase){
-                return false
+            if (!isBuidSuccessful(build)){
+                allComplete=false
+                println "Waiting for ${key(build)} status.phase = '${build.status.phase}' , expected 'Complete'"
             }
         }
-        return true
+        return allComplete
     }
 
     public List getImageStreamTags(List references){
@@ -156,7 +166,7 @@ class OpenShiftBuildHelper{
         Map buildConfigs=ocGet(['bc', '-l', "app=${bc.metadata.labels['app']}", '-n', config.app.build.namespace])
         if (buildConfigs!=null){
             for (Map buildConfig:buildConfigs.items){
-                println "Checking ${key(buildConfig)}"
+                //println "Checking ${key(buildConfig)}"
                 Map imageStreamTagReference=buildConfig.spec.output.to
                 if (dependencies["${imageStreamTagReference.namespace?:config.app.build.namespace}/${imageStreamTagReference.kind}/${imageStreamTagReference.name}"]!=null){
                     if (buildConfig.status.lastVersion > 0){
@@ -192,12 +202,60 @@ class OpenShiftBuildHelper{
         return checksum
     }
 
+    private int pickNextItemsToBuild(List processed, List pending, List queue){
+        int newItems=0
+        List snapshot=[]
+        snapshot.addAll(pending)
+
+        def iterator = pending.iterator()
+
+        while (iterator.hasNext()){
+            Map bc = iterator.next()
+            boolean picked=false
+
+            //println "Checking ${key(bc)} spec.strategy"
+
+            if ('ImageStreamTag'.equalsIgnoreCase(bc.spec?.strategy?.dockerStrategy?.from?.kind)){
+                if (isNextToBuild(bc.spec?.strategy?.dockerStrategy?.from, snapshot, processed)){
+                    picked = true
+                }
+            }else if ('ImageStreamTag'.equalsIgnoreCase(bc.spec?.strategy?.sourceStrategy?.from?.kind)){
+                if (isNextToBuild(bc.spec?.strategy?.sourceStrategy?.from, snapshot, processed)){
+                    picked = true
+                }
+            }else{
+                throw new RuntimeException("I don't know how to handle this type of build! ${key(bc)}  -  :`(")
+            }
+
+            //Check for source of Chained Builds
+            if (picked && bc.spec?.source?.images != null){
+                //println "Checking ${key(bc)} spec.source.images"
+                for (Map image:bc.spec.source?.images){
+                    if (!isNextToBuild(image.from, snapshot, processed)){
+                        picked=false
+                        break;
+                    }
+                }
+            }
+
+            if (picked){
+                newItems++
+                queue.add(bc)
+                iterator.remove()
+            }
+        }
+
+        return newItems
+    }
+
     public void build(){
         List pending=[]
         List processing=[]
         List processed=[]
-
         Map indexByKey=[:]
+        
+        //[buildConfig:null, state:'new', buildName:null, builds:0, dependsOn:[:], output:[from:[kind:''], to:['kind':'']] ]
+        Map items = [:] //Indexed by key
 
         println 'Building ...'
         config.app.templates.build.each { template ->
@@ -210,49 +268,25 @@ class OpenShiftBuildHelper{
         }
 
         while (pending.size()>0){
-            //first pass
-            //if (processed.size() == 0){
-                List snapshot=[]
-                snapshot.addAll(pending)
 
-                def iterator = pending.iterator()
-                while (iterator.hasNext()){
-                    Map bc = iterator.next()
-                    boolean picked=false
+            def iterator = pending.iterator()
+            boolean hasPickedNewOne=false
 
-                    //println "Checking ${key(bc)} spec.strategy"
+            if (pickNextItemsToBuild(processed, pending, processing) > 0){
+                hasPickedNewOne=true
+            }
 
-                    if ('ImageStreamTag'.equalsIgnoreCase(bc.spec?.strategy?.dockerStrategy?.from?.kind)){
-                        if (isNextToBuild(bc.spec?.strategy?.dockerStrategy?.from, snapshot, processed)){
-                            picked = true
-                        }
-                    }else if ('ImageStreamTag'.equalsIgnoreCase(bc.spec?.strategy?.sourceStrategy?.from?.kind)){
-                        if (isNextToBuild(bc.spec?.strategy?.sourceStrategy?.from, snapshot, processed)){
-                            picked = true
-                        }
-                    }else{
-                        throw new RuntimeException("I don't know how to handle this type of build! ${key(bc)}  -  :`(")
-                    }
-
-                    //Check for source of Chained Builds
-                    if (picked && bc.spec?.source?.images != null){
-                        //println "Checking ${key(bc)} spec.source.images"
-                        for (Map image:bc.spec.source?.images){
-                            if (!isNextToBuild(image.from, snapshot, processed)){
-                                picked=false
-                                break;
-                            }
-                        }
-                    }
-
-                    if (picked){
-                        processing.add(bc)
-                        iterator.remove()
-                    }
-                }
             if (processing.size() == 0) {
                 throw new RuntimeException("Oh oh! I've failed to predict the next build(s) :`(")
             }
+
+            //This means that it hasn't found a new item to process.
+            //and it is stuck waiting for others build to complete
+            if (!hasPickedNewOne){
+                println 'Waiting 5s'
+                Thread.sleep(5 * 1000);
+            }
+
             //}
             Map entryCount=[:]
             while (processing.size()>0){
@@ -261,26 +295,60 @@ class OpenShiftBuildHelper{
                     boolean skipThisOne=false
                     Map original = iterator2.next()
                     Map bc = toJson(groovy.json.JsonOutput.toJson(original))
+                    println "Processing ${key(bc)}"
 
                     Map outputTo = bc.spec.output.to
                     int currentEntryCount = entryCount[key(bc)] = (entryCount[key(bc)]?:0) + 1
 
                     if (currentEntryCount > 10){
-                        throw new RuntimeException("I am stuck! I've already tried processing ${key(bc)} ${currentEntryCount} times.")
+                        //backoff
+                        pending.add(original)
+                        iterator2.remove()
                     }
+
                     List relatedBuilds=getLatestRelatedBuilds(bc)
                     if (!allBuildsSuccessful(relatedBuilds)){
+                        boolean backoff=false
+                        //if the item is waiting for a build of a BuildConfig int the processing queue, backoff and return item to the pending queue
+                        for (Map build:relatedBuilds){
+                            if (isBuidActive(build)){
+                                for (Map bc2:processing){
+                                    if ("${key(bc2)}" == "${build.status.config.kind}/${build.status.config.name}"){
+                                        backoff=true
+                                    }
+                                }
+                            }else if (!isBuidSuccessful(build)){
+                                for (Map bc2:processed){
+                                    if ("${key(bc2)}" == "${build.status.config.kind}/${build.status.config.name}"){
+                                        processed.remove(bc2)
+                                        pending.add(bc2)
+                                        break //end for loop
+                                    }
+                                }
+                                //new to re-queue and try rebuilding it
+                                backoff=true
+                            }
+                        }
+
+                        //backoff
+                        if (backoff){
+                            pending.add(original)
+                            iterator2.remove()
+                        }
+
+                        //skip to next item
                         continue
                     }
                     
                     List imageStreamTagReferences = getBuildConfigFromImageStreamTagReferences(bc)
                     List imageStreamTags = getImageStreamTags(imageStreamTagReferences)
+
                     if (imageStreamTagReferences.size() != imageStreamTags.size()){
                         throw new RuntimeException("One more required images are missing!")
                     }
 
-                    if (getVerboseLevel() >= 3) println "Analyzing ${key(bc)}"
                     String buildHash=calculateBuildHash(bc)
+
                     if (getVerboseLevel() >= 3) println "Build hash = ${buildHash}"
 
                     List images=getImageStreamTagByBuildHash(outputTo, buildHash)
@@ -304,10 +372,16 @@ class OpenShiftBuildHelper{
                         throw new RuntimeException("Hell broke loose! ")
                     }
                     if (!skipThisOne){
-                        processed.add(bc)
+                        processed.add(original)
                         iterator2.remove()
                     }
                 } //end while (processing queue)
+
+                //There are items left in the queue
+                if (processing.size()>0){
+                    println 'Waiting 4s'
+                    Thread.sleep(4 * 1000);
+                }
             } //end while (delay, retry)
 
         } // end while

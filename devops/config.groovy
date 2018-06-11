@@ -11,7 +11,7 @@ app {
         workDir = ['git', 'rev-parse', '--show-toplevel'].execute().text.trim()
         uri = ['git', 'config', '--get', 'remote.origin.url'].execute().text.trim()
         commit = ['git', 'rev-parse', 'HEAD'].execute().text.trim()
-        ref = 'refs/pull/697/head'
+        ref = ['bash','-c', 'git config branch.`git name-rev --name-only HEAD`.merge'].execute().text.trim()
         changeId = '697'
     }
     build {
