@@ -5,7 +5,4 @@ set -x && \
 pip install -U pip setuptools wheel && \
 mkdir -p ${APP_ROOT}/src/frontend && \
 curl -sLo ${APP_ROOT}/src/frontend/package.json ${NODE_PACKAGE_URL} && \
-curl -sLo ${APP_ROOT}/src/frontend/package-lock.json ${NODE_PACKAGE_LOCK_URL} && \
-cd ${APP_ROOT}/src/frontend && npm install && \
-curl -sLo ${APP_ROOT}/src/requirements.txt ${PYTHON_REQUIREMENTS_URL} && \
-cd ${APP_ROOT}/src && pip install -r requirements.txt
+curl -sLo ${APP_ROOT}/src/frontend/package-lock.json ${NODE_PACKAGE_LOCK_URL}
