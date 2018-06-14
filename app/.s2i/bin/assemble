@@ -29,30 +29,8 @@ echo "---> Installing application source ..."
 #mv /tmp/src/* ./
 cp -rl /tmp/src/* ./ && rm -r /tmp/src/*
 
-if [[ ! -z "$UPGRADE_PIP_TO_LATEST" || ! -z "$ENABLE_PIPENV" ]]; then
-  echo "---> Upgrading pip to latest version ..."
-  pip install -U pip setuptools wheel
-fi
-
-if [[ ! -z "$ENABLE_PIPENV" ]]; then
-  install_pipenv
-  echo "---> Installing dependencies via pipenv ..."
-  if [[ -f Pipfile ]]; then
-    pipenv install --deploy
-  elif [[ -f requirements.txt ]]; then
-    pipenv install -r requirements.txt
-  fi
-  pipenv check
-elif [[ -f requirements.txt ]]; then
-  echo "---> Installing dependencies ..."
-  pip install -r requirements.txt
-elif [[ -f setup.py ]]; then
-  echo "---> Installing application ..."
-  python setup.py develop
-fi
-
 cd frontend
-npm install
+#npm install
 npm run build
 cd ..
 
