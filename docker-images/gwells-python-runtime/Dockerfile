@@ -8,4 +8,4 @@ curl -sLo ${APP_ROOT}/src/frontend/package.json ${NODE_PACKAGE_URL} && \
 curl -sLo ${APP_ROOT}/src/frontend/package-lock.json ${NODE_PACKAGE_LOCK_URL} && \
 curl -sLo ${APP_ROOT}/src/requirements.txt ${PYTHON_REQUIREMENTS_URL} && \
 cd ${APP_ROOT}/src && pip install -r requirements.txt && \
-cd ${APP_ROOT}/src/frontend && npm install npm@latest -g && npm install ci-install -g && npm ci --loglevel info
+cd ${APP_ROOT}/src/frontend && npm install --loglevel info
