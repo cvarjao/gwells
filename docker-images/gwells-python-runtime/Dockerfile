@@ -1,6 +1,7 @@
 FROM openshift/python:3.5
 RUN source scl_source enable rh-python35 rh-nodejs6 && \
 source ${APP_ROOT}/bin/activate && \
+set -x && \
 pip install -U pip setuptools wheel && \
 curl -Lo ${APP_ROOT}/src/requirements.txt ${PYTHON_REQUIREMENTS_URL} && \
 mkdir -p ${APP_ROOT}/src/frontend && \
