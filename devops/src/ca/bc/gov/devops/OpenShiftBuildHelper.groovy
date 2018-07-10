@@ -174,18 +174,18 @@ class OpenShiftBuildHelper extends OpenShiftHelper{
     }
 
     private String calculateBuildHash(Map bc){
-        Map record = ['images':[:]]
+        Map record = ['images':[]]
         Map fromImageStreamTag = (bc.spec?.strategy?.dockerStrategy?.from)?:(bc.spec?.strategy?.sourceStrategy?.from)
 
         record['buildConfig']=bc.metadata.labels['hash']
         record['source']=bc.metadata.labels['tree-hash']
-        record['images']['from']=getImageStreamTag(fromImageStreamTag)?.image?.metadata?.name
+        record['images']<<getImageStreamTag(fromImageStreamTag)?.image?.metadata?.name
 
         //Handles chained Builds
         if (bc.spec?.source?.images != null){
             for (Map image:bc.spec.source?.images){
                 Map from = image.from
-                record['images']["${from.namespace}/${from.kind}/${from.name}"]=getImageStreamTag(from)?.image?.metadata?.name
+                record['images']<<getImageStreamTag(from)?.image?.metadata?.name
             }
         }
 
