@@ -31,10 +31,11 @@
             "kind": "ImageStream",
             "apiVersion": "v1",
             "metadata": {
-                "name": "gwells${NAME_SUFFIX}",
+                "name": "gwells",
                 "creationTimestamp": null,
                 "labels": {
-                    "base-name":"gwells"
+                    "base-name":"gwells",
+                    "shared": "true"
                 },
                 "annotations": {
                     "description": "Keeps track of changes in the application image"
@@ -50,10 +51,11 @@
             "kind": "ImageStream",
             "apiVersion": "v1",
             "metadata": {
-                "name": "gwells-static${NAME_SUFFIX}",
+                "name": "gwells-static",
                 "creationTimestamp": null,
                 "labels": {
-                    "base-name":"gwells-static"
+                    "base-name":"gwells-static",
+                    "shared": "true"
                 },
                 "annotations": {
                     "description": "Keeps track of changes in the application image"
@@ -73,7 +75,7 @@
                 "name": "minio-access-parameters${NAME_SUFFIX}",
                 "creationTimestamp": null,
                 "annotations": {
-                    "as-copy-of": "gwells-minio-secrets"
+                    "as-copy-of": "template.gwells-minio-secrets"
                 }
             },
             "data": {
@@ -91,7 +93,7 @@
                 "creationTimestamp": null,
                 "name": "gwells-django${NAME_SUFFIX}",
                 "annotations": {
-                    "as-copy-of": "gwells-django-secrets"
+                    "as-copy-of": "template.gwells-django-secrets"
                 }
             },
             "data": {
@@ -109,7 +111,7 @@
                 "creationTimestamp": null,
                 "name": "gwells-database-credentials${NAME_SUFFIX}",
                 "annotations": {
-                    "template.openshift.io.bcgov/create": "true"
+                    "as-copy-of": "template.gwells-database-credentials"
                 }
             },
             "data": {
@@ -129,7 +131,7 @@
                 "creationTimestamp": null,
                 "name": "gwells-global-config${NAME_SUFFIX}",
                 "annotations": {
-                    "as-copy-of": "gwells-global-config"
+                    "as-copy-of": "template.gwells-global-config"
                 }
             }
         },
@@ -520,6 +522,53 @@
                                 "terminationMessagePath": "/dev/termination-log",
                                 "terminationMessagePolicy": "File",
                                 "imagePullPolicy": "Always"
+                            },
+                            {
+                                "name": "gwells-static${NAME_SUFFIX}",
+                                "image": " ",
+                                "ports": [
+                                    {
+                                        "containerPort": 2015,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "resources": {
+                                    "limits": {
+                                        "cpu": "8m",
+                                        "memory": "24Mi"
+                                    },
+                                    "requests": {
+                                        "cpu": "5m",
+                                        "memory": "16Mi"
+                                    }
+                                },
+                                "livenessProbe": {
+                                    "httpGet": {
+                                        "path": "/gwells/static/gwells/icons/geolocate.png",
+                                        "port": 2015,
+                                        "scheme": "HTTP"
+                                    },
+                                    "initialDelaySeconds": 60,
+                                    "timeoutSeconds": 5,
+                                    "periodSeconds": 10,
+                                    "successThreshold": 1,
+                                    "failureThreshold": 6
+                                },
+                                "readinessProbe": {
+                                    "httpGet": {
+                                        "path": "/gwells/static/gwells/icons/geolocate.png",
+                                        "port": 2015,
+                                        "scheme": "HTTP"
+                                    },
+                                    "initialDelaySeconds": 5,
+                                    "timeoutSeconds": 2,
+                                    "periodSeconds": 5,
+                                    "successThreshold": 1,
+                                    "failureThreshold": 10
+                                },
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "imagePullPolicy": "Always"
                             }
                         ],
                         "restartPolicy": "Always",
@@ -568,6 +617,11 @@
                         "protocol": "TCP",
                         "port": 8080,
                         "targetPort": 8080
+                    },{
+                        "name": "static",
+                        "protocol": "TCP",
+                        "port": 2015,
+                        "targetPort": 2015
                     }
                 ],
                 "selector": {
@@ -762,11 +816,11 @@
                 "path": "/gwells/static/",
                 "to": {
                     "kind": "Service",
-                    "name": "gwells-static${NAME_SUFFIX}",
+                    "name": "gwells${NAME_SUFFIX}",
                     "weight": 100
                 },
                 "port": {
-                    "targetPort": "web"
+                    "targetPort": "static"
                 },
                 "tls": {
                     "termination": "edge"

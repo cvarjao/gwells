@@ -132,7 +132,7 @@
                 }
             },
             "spec": {
-                "completionDeadlineSeconds": 180,
+                "completionDeadlineSeconds": 1440,
                 "successfulBuildsHistoryLimit": 3,
                 "failedBuildsHistoryLimit": 3,
                 "triggers": [
@@ -159,7 +159,21 @@
                         "from": {
                             "kind": "ImageStreamTag",
                             "name": "gwells-python-35-rhel7:3.5-23"
-                        }
+                        },
+                        "env": [
+                            {
+                                "name": "PYTHON_REQUIREMENTS_URL",
+                                "value": "https://raw.githubusercontent.com/bcgov/gwells/cb47ec1d0c31b6f1586843e491f7cb5f1b98d61a/app/requirements.txt"
+                            },
+                            {
+                                "name": "NODE_PACKAGE_URL",
+                                "value": "https://raw.githubusercontent.com/bcgov/gwells/cb47ec1d0c31b6f1586843e491f7cb5f1b98d61a/app/frontend/package.json"
+                            },
+                            {
+                                "name": "NODE_PACKAGE_LOCK_URL",
+                                "value": "https://raw.githubusercontent.com/bcgov/gwells/cb47ec1d0c31b6f1586843e491f7cb5f1b98d61a/app/frontend/package-lock.json"
+                            }
+                        ]
                     }
                 },
                 "output": {
@@ -168,7 +182,16 @@
                         "name": "gwells-python-runtime:${ENV_NAME}"
                     }
                 },
-                "resources": {},
+                "resources": {
+                    "limits": {
+                        "cpu": "2",
+                        "memory": "8Gi"
+                    },
+                    "requests": {
+                        "cpu": "1",
+                        "memory": "4Gi"
+                    }
+                },
                 "postCommit": {},
                 "nodeSelector": null
             }
@@ -263,7 +286,7 @@
                 "annotations": { }
             },
             "spec": {
-                "completionDeadlineSeconds": 120,
+                "completionDeadlineSeconds": 140,
                 "successfulBuildsHistoryLimit": 3,
                 "failedBuildsHistoryLimit": 3,
                 "triggers": [

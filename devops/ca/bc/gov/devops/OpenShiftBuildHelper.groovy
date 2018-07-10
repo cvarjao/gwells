@@ -1,17 +1,12 @@
 
 package ca.bc.gov.devops
 
-import static ca.bc.gov.devops.OpenShiftHelper.key
-import static ca.bc.gov.devops.OpenShiftHelper.oc
-import static ca.bc.gov.devops.OpenShiftHelper.ocGet
-import static ca.bc.gov.devops.OpenShiftHelper.ocApply
-import static ca.bc.gov.devops.OpenShiftHelper.toJson
-import static ca.bc.gov.devops.OpenShiftHelper.calculateChecksum
-import static ca.bc.gov.devops.OpenShiftHelper.addBuildConfigEnv
-import static ca.bc.gov.devops.OpenShiftHelper.getVerboseLevel
+import ca.bc.gov.devops.OpenShiftHelper
 
-class OpenShiftBuildHelper{
+class OpenShiftBuildHelper extends OpenShiftHelper{
     def config
+    //[object:null, phase:'New', buildName:null, builds:0, dependsOn:[], output:[from:[kind:''], to:['kind':'']] ]
+    //Map cache = [:] //Indexed by key
     public OpenShiftBuildHelper(config){
         this.config=config
     }
@@ -41,7 +36,7 @@ class OpenShiftBuildHelper{
         Map imageStreamImage = imageStreamImageLookupCache[cacheKey]
 
         if (imageStreamImage == null){
-            imageStreamImage=toJson(oc(['get', 'ImageStreamImage', name, '-o', 'json', '-n', namespace]).out)
+            imageStreamImage=ocGet(['ImageStreamImage', name, '-n', namespace])
             imageStreamImageLookupCache[cacheKey]=imageStreamImage
         }
         
@@ -54,9 +49,10 @@ class OpenShiftBuildHelper{
         Map images = [:]
         String namespace=ref.namespace?:config.app.build.namespace
         String imageStreamName=ref.name.split(':')[0]
-        Map imageStreamTags=toJson(oc(['get', 'ImageStreamTag','-l',"image-stream.name=${imageStreamName}", '-o', 'json', '-n', namespace]).out)
+        Map imageStreamTags=ocGet(['ImageStreamTag','-l',"image-stream.name=${imageStreamName}", '-n', namespace])
+        
 
-        for (Map imageStreamTag:imageStreamTags.items){
+        for (Map imageStreamTag:imageStreamTags.cache){
             String imageName=imageStreamTag.image.metadata.name
             if (images[imageName]==null){
                 Map imageStreamImage = getImageStreamImage(namespace, "${imageStreamName}@${imageName}")
@@ -74,7 +70,7 @@ class OpenShiftBuildHelper{
         /// /apis/image.openshift.io/v1/namespaces/csnr-devops-lab-tools/imagestreamimages/
 
         //oc get is/gwells-pr-719 -o json
-        //status.tags[].items[].image
+        //status.tags[].cache[].image
 
         //oc export isimage/gwells-pr-719@sha256:b05ed259a8336b69356a586a698dcf9e1d9563c09ef3e5d20a39fdc7bf7a6f86 -o json
         //image.dockerImageMetadata.ContainerConfig.Env[]
@@ -87,11 +83,7 @@ class OpenShiftBuildHelper{
             throw new RuntimeException("Expected kind='ImageStreamTag', but found kind='${ref?.kind}'")
         }
         
-        Map ret=oc(['get', 'istag', ref.name, '--ignore-not-found=true', '-o', 'json', '-n', ref.namespace?:config.app.build.namespace])
-        if (ret.out!=null && ret.out.length() > 0){
-            return toJson(ret.out)
-        }
-        return null
+        return ocGet(['istag', ref.name, '--ignore-not-found=true', '-n', ref.namespace?:config.app.build.namespace])
     }
 
     boolean isSameImageStreamTagReference(Map ref1, Map ref2){
@@ -165,7 +157,7 @@ class OpenShiftBuildHelper{
 
         Map buildConfigs=ocGet(['bc', '-l', "app=${bc.metadata.labels['app']}", '-n', config.app.build.namespace])
         if (buildConfigs!=null){
-            for (Map buildConfig:buildConfigs.items){
+            for (Map buildConfig:buildConfigs.cache){
                 //println "Checking ${key(buildConfig)}"
                 Map imageStreamTagReference=buildConfig.spec.output.to
                 if (dependencies["${imageStreamTagReference.namespace?:config.app.build.namespace}/${imageStreamTagReference.kind}/${imageStreamTagReference.name}"]!=null){
@@ -181,15 +173,15 @@ class OpenShiftBuildHelper{
         return builds
     }
 
-    public String calculateBuildHash(Map bc){
+    private String calculateBuildHash(Map bc){
         Map record = ['images':[:]]
         Map fromImageStreamTag = (bc.spec?.strategy?.dockerStrategy?.from)?:(bc.spec?.strategy?.sourceStrategy?.from)
 
         record['buildConfig']=bc.metadata.labels['hash']
         record['source']=bc.metadata.labels['tree-hash']
-
         record['images']['from']=getImageStreamTag(fromImageStreamTag)?.image?.metadata?.name
 
+        //Handles chained Builds
         if (bc.spec?.source?.images != null){
             for (Map image:bc.spec.source?.images){
                 Map from = image.from
@@ -248,142 +240,257 @@ class OpenShiftBuildHelper{
         return newItems
     }
 
+    private static void applyBuildConfig(Map config, List templates){
+        println 'Applying Build Templates ...'
+        templates.each { Map template ->
+            template.objects.each { object ->
+                object.metadata.labels['app-name'] = config.app.name
+                if (!'true'.equalsIgnoreCase(object.metadata.labels['shared'])){
+                    object.metadata.labels['env-name'] = config.app.build.name
+                    object.metadata.labels['app'] =  object.metadata.labels['app-name'] + '-' + object.metadata.labels['env-name']
+                }
+            }
+
+            Map ret= ocApply(template.objects, ['-n', config.app.build.namespace])
+
+            if (ret.status != 0) {
+                println ret
+                System.exit(ret.status)
+            }
+        }
+    } //end applyBuildConfig
+
+    private List loadBuildTemplates(Map config){
+        Map parameters =[
+                'NAME_SUFFIX':config.app.build.suffix,
+                'ENV_NAME': config.app.build.name,
+                'SOURCE_REPOSITORY_URL': config.app.git.uri,
+                'SOURCE_REPOSITORY_REF': config.app.git.ref
+        ]
+
+        return loadTemplates(config, config.app.build, parameters)
+    }
+
     public void build(){
         List pending=[]
         List processing=[]
         List processed=[]
         Map indexByKey=[:]
-        
-        //[buildConfig:null, state:'new', buildName:null, builds:0, dependsOn:[:], output:[from:[kind:''], to:['kind':'']] ]
-        Map items = [:] //Indexed by key
 
-        println 'Building ...'
-        config.app.templates.build.each { template ->
+        //println 'Building ...'
+
+        List templates = loadBuildTemplates(config)
+
+        applyBuildConfig(config, templates)
+
+        //Loading objects from the template into cache
+        templates.each { Map template ->
             template.objects.each { object ->
-                indexByKey["${key(object)}"] = object
-                if ('BuildConfig'.equalsIgnoreCase(object.kind)){
-                    pending.add(object)
+                Map item = cache["${OpenShiftHelper.guid(object)}"] = ['object':object, 'phase':'New']
+            }
+        }
+
+        //println cache
+        def lookupImageStreamByImageStreamTag = {Map refImageStreamTag ->
+            //println "> lookupImageStreamByImageStreamTag () - ${refImageStreamTag}"
+            String outputImageStreamTagGuid = OpenShiftHelper.guid(refImageStreamTag)
+            Map outputImageStreamTagEntry = cache[outputImageStreamTagGuid]
+            if (outputImageStreamTagEntry == null ) {
+                //println "Creating cache Entry for '${outputImageStreamTagGuid}'"
+                outputImageStreamTagEntry = [object:['kind':refImageStreamTag.kind, 'metadata':['namespace':refImageStreamTag.namespace, 'name':refImageStreamTag.name]], 'phase':'cached']
+                cache[outputImageStreamTagGuid] = outputImageStreamTagEntry
+            }
+
+            Map refOutputImageStream = ['kind':'ImageStream', 'metadata':['namespace':outputImageStreamTagEntry.object.metadata.namespace, 'name':outputImageStreamTagEntry.object.metadata.name.split(':')[0]]]
+            String outputImageStreamGuid = OpenShiftHelper.guid(refOutputImageStream)
+            Map outputImageStreamEntry = cache[outputImageStreamGuid]
+            if (outputImageStreamEntry == null ) {
+                //println "Creating cache Entry for '${outputImageStreamGuid}'"
+                outputImageStreamEntry = [object:['kind':refOutputImageStream.kind, 'metadata':['namespace':refOutputImageStream.namespace, 'name':refOutputImageStream.name]], 'phase':'cached']
+                cache[outputImageStreamGuid] = outputImageStreamEntry
+            }
+            outputImageStreamTagEntry['imageStream'] = outputImageStreamEntry
+
+            return outputImageStreamEntry
+        }
+
+        //Link BuildConfig to ImageStream
+        println 'Fetching ImageStreamTags'
+        for (Map item:cache.values().toArray()){
+            if ('BuildConfig' == item?.object?.kind){
+                Map object = item.object
+                //println "Preparing ${OpenShiftHelper.guid(object)}"
+                //println object.spec.output.to
+                Map outputImageStream = lookupImageStreamByImageStreamTag(object.spec.output.to)
+                outputImageStream['buildConfig'] = item
+                item['imageStream'] = outputImageStream
+
+                lookupImageStreamByImageStreamTag(object.spec?.strategy?.dockerStrategy?.from?:object.spec?.strategy?.sourceStrategy?.from)
+
+                //Now deal with Chained Builds
+                for (Map image:object.spec.source?.images){
+                    lookupImageStreamByImageStreamTag(image.from)
                 }
             }
         }
 
-        while (pending.size()>0){
+        
+        //Collect BuildConfig Dependencies
+        println 'Collecting BuildConfig Interdependencies'
+        for (Map item:cache.values().toArray()){
+            Map object = item.object
+            if ('BuildConfig'.equalsIgnoreCase(object.kind)){
+                //println "Dependencies ${OpenShiftHelper.guid(object)}"
+                List dependencies = []
+                Map entry1=lookupImageStreamByImageStreamTag(object.spec?.strategy?.dockerStrategy?.from?:object.spec?.strategy?.sourceStrategy?.from)
+                if (entry1['buildConfig']!=null){
+                    dependencies.add(entry1['buildConfig'])
+                }
 
-            def iterator = pending.iterator()
-            boolean hasPickedNewOne=false
-
-            if (pickNextItemsToBuild(processed, pending, processing) > 0){
-                hasPickedNewOne=true
+                for (Map image:object.spec?.source?.images){
+                    if ('ImageStreamTag' == image.from.kind){
+                        Map entry2=lookupImageStreamByImageStreamTag(image.from)
+                        if (entry2['buildConfig']!=null){
+                            dependencies.add(entry2['buildConfig'])
+                        }
+                    }
+                }
+                item['dependencies']=dependencies
             }
+        }
 
-            if (processing.size() == 0) {
-                throw new RuntimeException("Oh oh! I've failed to predict the next build(s) :`(")
-            }
+        int iteration = 0;
+        java.time.Instant startInstant = java.time.Instant.now()
+        java.time.Duration duration = java.time.Duration.ZERO
 
-            //This means that it hasn't found a new item to process.
-            //and it is stuck waiting for others build to complete
-            if (!hasPickedNewOne){
-                println 'Waiting 5s'
-                Thread.sleep(5 * 1000);
-            }
+        //First of all, cancel all builds in progress! (or should it wait for them to finish?)
+        println 'Cancelling all builds in-progress'
+        for (Map item:cache.values().toArray()){
+                Map object = item.object
+                if ('BuildConfig'.equalsIgnoreCase(object.kind)){
+                    oc(['cancel-build', "bc/${object.metadata.name}", '-n', object.metadata.namespace])
+                }
+        }
 
-            //}
-            Map entryCount=[:]
-            while (processing.size()>0){
-                def iterator2 = processing.iterator()
-                while (iterator2.hasNext()){
-                    boolean skipThisOne=false
-                    Map original = iterator2.next()
-                    Map bc = toJson(groovy.json.JsonOutput.toJson(original))
-                    println "Processing ${key(bc)}"
+        println 'Building ...'
+        while (true){
+            iteration ++
+            int pendingItems = 0
+            int sleepInSeconds = -1
 
-                    Map outputTo = bc.spec.output.to
-                    int currentEntryCount = entryCount[key(bc)] = (entryCount[key(bc)]?:0) + 1
+            boolean triggered=false
+            for (Map item:cache.values().toArray()){
+                Map object = item.object
+                if ('BuildConfig'.equalsIgnoreCase(object.kind)){
+                    if ('Complete' == item.phase) continue
+                    if ('Cancelled' == item.phase) continue
+                    if ('Failed' == item.phase) continue
 
-                    if (currentEntryCount > 10){
-                        //backoff
-                        pending.add(original)
-                        iterator2.remove()
+                    //println "Processing  - ${OpenShiftHelper.guid(object)}  status:${item.phase} attempts:${item.attempts?:0}"
+                    pendingItems++
+                    
+                    boolean dependenciesMet=true
+                    for (Map dependency:item.dependencies){
+                        //println "  > ${OpenShiftHelper.guid(dependency.object)} - status:${dependency.phase}"
+                        if ('Complete' != dependency.phase){
+                            dependenciesMet = false
+                        }
+                    } //end for
+                    if (!dependenciesMet){
+                        item.phase = 'Waiting'
+                        //println "  skip (dependencies not met yet)"
+                        continue
                     }
 
-                    List relatedBuilds=getLatestRelatedBuilds(bc)
-                    if (!allBuildsSuccessful(relatedBuilds)){
-                        boolean backoff=false
-                        //if the item is waiting for a build of a BuildConfig int the processing queue, backoff and return item to the pending queue
-                        for (Map build:relatedBuilds){
-                            if (isBuidActive(build)){
-                                for (Map bc2:processing){
-                                    if ("${key(bc2)}" == "${build.status.config.kind}/${build.status.config.name}"){
-                                        backoff=true
+
+                    //println "Processing  - ${OpenShiftHelper.guid(object)}  status:${item.phase} attempts:${item.attempts?:0}  (${iteration})"
+                    if ( 'New' == item.phase || 'Waiting' == item.phase ){
+                        Map outputTo = object.spec.output.to
+                        /*
+                        List imageStreamTagReferences = getBuildConfigFromImageStreamTagReferences(object)
+                        List imageStreamTags = getImageStreamTags(imageStreamTagReferences)
+
+                        if (imageStreamTagReferences.size() != imageStreamTags.size()){
+                            throw new RuntimeException("One or more required images are missing!")
+                        }
+                        */
+                        String buildHash=calculateBuildHash(object)
+                        if (getVerboseLevel() >= 3) println "Build hash = ${buildHash}"
+
+                        Map outputImageStreamEntry = item['imageStream']
+                        Map imageStreamTags=ocGet(['ImageStreamTag','-l',"image-stream.name=${outputImageStreamEntry.object.metadata.name}", '-n', object.metadata.namespace])
+                        Map images = [:]
+
+                        for (Map imageStreamTag:imageStreamTags.items){
+                            String imageName=imageStreamTag.image.metadata.name
+                            if (images[imageName]==null){
+                                Map imageStreamImage = getImageStreamImage(object.metadata.namespace, "${outputImageStreamEntry.object.metadata.name}@${imageName}")
+                                for (String imageEnv: imageStreamImage.image.dockerImageMetadata.'Config'.'Env'){
+                                    if (imageEnv.startsWith("_BUILD_HASH")){
+                                        if ("_BUILD_HASH=${buildHash}".equalsIgnoreCase(imageEnv)){
+                                            images[imageName]=imageStreamImage.image.metadata
+                                            break;
+                                        }
                                     }
                                 }
-                            }else if (!isBuidSuccessful(build)){
-                                for (Map bc2:processed){
-                                    if ("${key(bc2)}" == "${build.status.config.kind}/${build.status.config.name}"){
-                                        processed.remove(bc2)
-                                        pending.add(bc2)
-                                        break //end for loop
-                                    }
-                                }
-                                //new to re-queue and try rebuilding it
-                                backoff=true
                             }
                         }
 
-                        //backoff
-                        if (backoff){
-                            pending.add(original)
-                            iterator2.remove()
+                        //println images
+                        //List images=getImageStreamTagByBuildHash(outputTo, buildHash)
+                        //System.exit(1)
+                        if (images.size() == 0){
+                            addBuildConfigEnv(object, [name:'_BUILD_HASH', value:buildHash])
+                            Map ocApplyRet=ocApply([object], ['-n', config.app.build.namespace])
+                            //Start New Build
+                            //TODO: is nuild already in progress?
+                            println "Starting New Build for ${key(object)}"
+                            //item.phase = 'Complete'
+                            item['attempts']=(item['attempts']?:0) + 1
+                            item.phase = 'Pending'
+                            item.'build-name' = oc(['start-build', object.metadata.name, '-n', object.metadata.namespace, '-o', 'name']).out.toString().trim()
+                            
+                            //sleepInSeconds=Math.max(sleepInSeconds, 5)
+                            triggered=true
+                            
+                        }else if (images.size() == 1){
+                            Map imageStreamImage = images.values()[0]
+                            println "Reusing existing image (${imageStreamImage.name}) for ${key(object)}"
+                            Map outputImageStreagTag = getImageStreamTag(outputTo)
+                            if (outputImageStreagTag==null || !imageStreamImage.name.equalsIgnoreCase(outputImageStreagTag.image.metadata.name)){
+                                oc(['tag', '--source=imagestreamimage', "${outputTo.namespace?:config.app.build.namespace}/${outputTo.name.split(':')[0]}@${imageStreamImage.name}", "${outputTo.namespace?:config.app.build.namespace}/${outputTo.name}"])
+                            }
+                            item.phase = 'Complete'
+                            //Reuse Image from a previous build
+                        }else{
+                            //hell broke loose!
+                            throw new RuntimeException("Hell broke loose! ")
                         }
+                    }else if ( 'Running' == item.phase  || 'Pending' == item.phase){
+                        Map build = ocGet(["${item['build-name']}", '-n', object.metadata.namespace])
+                        item['build-status'] = build.status
+                        
+                        //since we are using the same status/phase name, don't let it reset to 'New'
+                        if ('New' != build.status.phase ) item.phase = build.status.phase
 
-                        //skip to next item
-                        continue
                     }
-                    
-                    List imageStreamTagReferences = getBuildConfigFromImageStreamTagReferences(bc)
-                    List imageStreamTags = getImageStreamTags(imageStreamTagReferences)
+                    // println "${OpenShiftHelper.guid(object)}  status:${item.phase} attempts:${item.attempts?:0}  (${iteration})"
+                } //end if (BuildConfig)
+            } //end for
 
-                    if (imageStreamTagReferences.size() != imageStreamTags.size()){
-                        throw new RuntimeException("One more required images are missing!")
-                    }
+            //println "pendingItems  - ${pendingItems}"
+            duration = java.time.Duration.between(startInstant, java.time.Instant.now())
+            if (pendingItems == 0) break //nothing left to process (everything is either 'Complete' or 'Cancelled'
+            if (triggered || sleepInSeconds == -1 ){
+                sleepInSeconds=4
+            }
 
-                    String buildHash=calculateBuildHash(bc)
-
-                    if (getVerboseLevel() >= 3) println "Build hash = ${buildHash}"
-
-                    List images=getImageStreamTagByBuildHash(outputTo, buildHash)
-                    addBuildConfigEnv(bc, [name:'_BUILD_HASH', value:buildHash])
-                    Map ocApplyRet=ocApply([bc], ['-n', config.app.build.namespace])
-
-                    if (images.size() == 0){
-                        //Start New Build
-                        //TODO: is nuild already in progress?
-                        println "Starting New Build for ${key(bc)}"
-                        println oc(['start-build', bc.metadata.name, '-n', 'csnr-devops-lab-tools'])
-                    }else if (images.size() == 1){
-                        println "Reusing exiting image (${images[0].name}) for ${key(bc)}"
-                        Map outputImageStreagTag = getImageStreamTag(outputTo)
-                        if (outputImageStreagTag==null || !images[0].name.equalsIgnoreCase(outputImageStreagTag.image.metadata.name)){
-                            oc(['tag', '--source=imagestreamimage', "${outputTo.namespace?:config.app.build.namespace}/${outputTo.name.split(':')[0]}@${images[0].name}", "${outputTo.namespace?:config.app.build.namespace}/${outputTo.name}"])
-                        }
-                        //Reuse Image from a previous build
-                    }else{
-                        //hell broke loose!
-                        throw new RuntimeException("Hell broke loose! ")
-                    }
-                    if (!skipThisOne){
-                        processed.add(original)
-                        iterator2.remove()
-                    }
-                } //end while (processing queue)
-
-                //There are items left in the queue
-                if (processing.size()>0){
-                    println 'Waiting 4s'
-                    Thread.sleep(4 * 1000);
-                }
-            } //end while (delay, retry)
-
-        } // end while
+            //println "Sleeping for ${sleepInSeconds} seconds"
+            //Thread.sleep(sleepInSeconds * 1000) // 4 seconds
+            println "Elapsed Seconds: ${duration.getSeconds()} (max = ${config.app.build.timeoutInSeconds})"
+            if (duration.getSeconds() > config.app.build.timeoutInSeconds) throw new java.util.concurrent.TimeoutException("Expected to take no more than ${config.app.build.timeoutInSeconds} seconds.")
+        } // end while(true)
+        duration = java.time.Duration.between(startInstant, java.time.Instant.now())
+        println "Elapsed Seconds: ${duration.getSeconds()} (max = ${config.app.build.timeoutInSeconds})"
     } //end build
 }
