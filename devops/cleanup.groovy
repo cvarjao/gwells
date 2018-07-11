@@ -5,6 +5,12 @@ import ca.bc.gov.devops.OpenShiftCleanupHelper
 
 def config = new ConfigSlurper('dev').parse(new File("config.groovy").toURI().toURL())
 
-new OpenShiftCleanupHelper(config).build()
+Map phases = ['bc': ['build'], 'dc': ['deployment'], 'all': ['build', 'deployment']]
+if(!args || !phases.keySet().contains(args[0].toLowerCase())){
+  println 'Please specify a valid phase to clean up [build/deployment/all]'
+  System.exit(1)
+}
+
+new OpenShiftCleanupHelper(config).cleanup(phases.get(args[0]))
 
 println 'Done!!'
