@@ -5,8 +5,7 @@ import ca.bc.gov.devops.OpenShiftHelper
 
 class OpenShiftCleanupHelper extends OpenShiftHelper{
     def config
-    //[object:null, phase:'New', buildName:null, builds:0, dependsOn:[], output:[from:[kind:''], to:['kind':'']] ]
-    //Map cache = [:] //Indexed by key
+
     public OpenShiftCleanupHelper(config){
         this.config=config
     }
@@ -43,13 +42,13 @@ class OpenShiftCleanupHelper extends OpenShiftHelper{
         }
     }
 
-    public void cleanup(List phases){
+    public void cleanup(List target){
         java.time.Instant startInstant = java.time.Instant.now()
         java.time.Duration duration = java.time.Duration.ZERO
 
         println 'Cleaning up...'
 
-        for (phase in phases) {
+        for (phase in target) {
             println "Processing '${phase}'"
             List templates = loadCleanupTemplates(config, phase)
             cleanupByPhase(templates, phase)
