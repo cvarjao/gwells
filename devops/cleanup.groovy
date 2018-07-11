@@ -1,10 +1,10 @@
 import groovy.transform.BaseScript
-import ca.bc.gov.devops.OpenShiftBuildHelper
+import ca.bc.gov.devops.OpenShiftCleanupHelper
 
 @BaseScript ca.bc.gov.devops.Base _super
 
 def config = new ConfigSlurper('dev').parse(new File("config.groovy").toURI().toURL())
 
-new OpenShiftBuildHelper(config).build()
+new OpenShiftCleanupHelper(config).build()
 
 println 'Done!!'
