@@ -25,8 +25,8 @@ class OpenShiftCleanupHelper extends OpenShiftHelper{
 
     private cleanupByPhase(List templates, String phase){
         // remove all resources tagged with the specified env-name
-        println "delete all -l env-name=${config.app[phase].name} -n ${config.app[phase].namespace}"
-        // oc(['delete', 'all', '-l', "env-name=${config.app[phase].name}", '-n', "${config.app[phase].namespace}"])
+        // println "delete all -l env-name=${config.app[phase].name} -n ${config.app[phase].namespace}"
+        oc(['delete', 'all', '-l', "env-name=${config.app[phase].name}", '-n', "${config.app[phase].namespace}"])
 
         if('build'.equalsIgnoreCase(phase)){
             // remove tagged images in shared image streams
@@ -35,8 +35,8 @@ class OpenShiftCleanupHelper extends OpenShiftHelper{
                     if ('ImageStream'.equalsIgnoreCase(object.kind)
                         && 'true'.equalsIgnoreCase(object.metadata.labels['shared'])
                         && !'true'.equalsIgnoreCase(object.metadata.labels['base-image'])){
-                        println "tag ${object.metadata.name}:${config.app[phase].name} -d -n ${config.app[phase].namespace}" 
-                        // oc(['tag', "${object.metadata.labels['base-name']}:${config.app[phase].name}", '-d', '-n', "${config.app[phase].namespace}"])
+                        // println "tag ${object.metadata.name}:${config.app[phase].name} -d -n ${config.app[phase].namespace}" 
+                        oc(['tag', "${object.metadata.name}:${config.app[phase].name}", '-d', '-n', "${config.app[phase].namespace}"])
                     }
                 }
             }
