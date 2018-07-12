@@ -176,6 +176,7 @@ class OpenShiftHelper{
         }
         return ret
     }
+
     public static Map ocGet(List args){
         List _args = ['get'] + args + ['-o', 'json']
         Map ret=oc(_args)
@@ -184,8 +185,6 @@ class OpenShiftHelper{
         }
         return null
     }
-
-
 
     public static Map ocProcess(Map template, List args){
         List _args = ['oc', 'process', '-f', '-', '-o', 'json'] + args 
@@ -221,6 +220,7 @@ class OpenShiftHelper{
     public static def toJson(String jsonAsText){
         return new groovy.json.JsonSlurper().parseText(jsonAsText)
     }
+
     /*
     same output as:
        echo 'test content' | git hash-object --stdin --no-filters

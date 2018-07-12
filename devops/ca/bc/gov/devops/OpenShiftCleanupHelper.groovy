@@ -6,53 +6,80 @@ import ca.bc.gov.devops.OpenShiftHelper
 class OpenShiftCleanupHelper extends OpenShiftHelper{
     def config
 
+    enum ConfigType {
+        BUILD('build'),
+        DEPLOYMENT('deployment')
+
+        ConfigType(String value){
+            this.value = value
+        }
+
+        private final String value
+
+        public String getValue(){
+            return value
+        }
+    }
+
     public OpenShiftCleanupHelper(config){
         this.config=config
     }
 
-    private List loadCleanupTemplates(Map config, String phase){
-        Map parameters =[
-                'NAME_SUFFIX':config.app[phase].suffix,
-                'ENV_NAME': config.app[phase].name,,
-                'BUILD_ENV_NAME': config.app[phase].name,
-                'SOURCE_REPOSITORY_URL': config.app.git.uri,
-                'SOURCE_REPOSITORY_REF': config.app.git.ref
-        ]
-
-        return loadTemplates(config, config.app.build, parameters)
-    }
-
-    private cleanupByPhase(List templates, String phase){
-        // remove all resources tagged with the specified env-name
-        // println "delete all -l env-name=${config.app[phase].name} -n ${config.app[phase].namespace}"
-        oc(['delete', 'all', '-l', "env-name=${config.app[phase].name}", '-n', "${config.app[phase].namespace}"])
-
-        if('build'.equalsIgnoreCase(phase)){
-            // remove tagged images in shared image streams
-            templates.each { Map template ->
-                template.objects.each { object ->
-                    if ('ImageStream'.equalsIgnoreCase(object.kind)
-                        && 'true'.equalsIgnoreCase(object.metadata.labels['shared'])
-                        && !'true'.equalsIgnoreCase(object.metadata.labels['base-image'])){
-                        // println "tag ${object.metadata.name}:${config.app[phase].name} -d -n ${config.app[phase].namespace}" 
-                        oc(['tag', "${object.metadata.name}:${config.app[phase].name}", '-d', '-n', "${config.app[phase].namespace}"])
-                    }
-                }
+    /*
+     * Removes tags related to the build specified in the configuration from shared image streams
+     * that are not "base-images" (e.g.: python base image for rhel7)
+     */
+    private void removeTagsFromSharedImageStreams(String nameSpace){
+        Map ret = ocGet(['is', '-l', "app-name=${config.app.name}", '-n', "${nameSpace}"])
+        for(imageStream in ret.items){
+            if('true'.equalsIgnoreCase(imageStream.metadata.labels['shared'])
+                && !'true'.equalsIgnoreCase(imageStream.metadata.labels['base-image'])){
+                oc(['tag', "${imageStream.metadata.name}:${config.app.build.name}", '-d', '-n', "${nameSpace}"])
             }
         }
     }
 
-    public void cleanup(List target){
+    /*
+     * Removes all the objects created by the build config provided by the configuration,
+     * in the specified namespace/project
+     */
+    private void cleanUpBuild(String nameSpace){
+        println 'Removing all objects created by the buildConfig...'
+
+        // deletes all resources labelled as app-env=mylabel
+        oc(['delete', 'all', '-l', "env-name=${config.app.build.name}", '-n', "${nameSpace}"])
+
+        // removes tags in shared imagestreams corresponfing to the build
+        removeTagsFromSharedImageStreams(nameSpace)
+    }
+
+    /*
+     * Removes all the objects created by the deployment config provided by the configuration,
+     * in the specified namespace/project
+     */
+    private void cleanUpDeployment(String nameSpace){
+        println 'Removing all objects created by the deploymentConfig...'
+
+        // deletes all resources labelled with app-env=mylabel
+        oc(['delete', 'all', '-l', "env-name=${config.app.deployment.name}", '-n', "${nameSpace}"])
+
+        // removes secret, configmap, pvc labelled with app-env=mylabel
+        oc(['delete', 'secret,configmap,pvc', '-l', "env-name=${config.app.deployment.name}", '-n', "${nameSpace}"])
+    }
+
+    public void cleanup(){
         java.time.Instant startInstant = java.time.Instant.now()
         java.time.Duration duration = java.time.Duration.ZERO
 
-        println 'Cleaning up...'
+        println 'Starting cleanup process...'
 
-        for (phase in target) {
-            println "Processing '${phase}'"
-            List templates = loadCleanupTemplates(config, phase)
-            cleanupByPhase(templates, phase)
-        }
+        // clean up teh deployment first...
+        cleanUpDeployment(config.app.deployment.namespace)
+        
+        // ...and then remove the build
+        cleanUpBuild(config.app.build.namespace)
+
+        println 'Cleanup process completed'
 
         duration = java.time.Duration.between(startInstant, java.time.Instant.now())
         println "Elapsed Seconds: ${duration.getSeconds()} (max = ${config.app.build.timeoutInSeconds})"
