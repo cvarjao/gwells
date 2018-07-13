@@ -29,13 +29,10 @@ class OpenShiftCleanupHelper extends OpenShiftHelper{
      * Removes tags related to the build specified in the configuration from shared image streams
      * that are not "base-images" (e.g.: python base image for rhel7)
      */
-    private void removeTagsFromSharedImageStreams(String nameSpace){
-        Map ret = ocGet(['is', '-l', "app-name=${config.app.name}", '-n', "${nameSpace}"])
+    private void removeTagsFromSharedImageStreams(String namespace){
+        Map ret = ocGet(['is', '-l', "app-name=${config.app.name}", '-n', "${namespace}"])
         for(imageStream in ret.items){
-            if('true'.equalsIgnoreCase(imageStream.metadata.labels['shared'])
-                && !'true'.equalsIgnoreCase(imageStream.metadata.labels['base-image'])){
-                oc(['tag', "${imageStream.metadata.name}:${config.app.build.name}", '-d', '-n', "${nameSpace}"])
-            }
+            oc(['delete', 'istag', "${imageStream.metadata.name}:${config.app.build.name}", '--ignore-not-found=true', '-n', "${namespace}"])
         }
     }
 
@@ -43,28 +40,30 @@ class OpenShiftCleanupHelper extends OpenShiftHelper{
      * Removes all the objects created by the build config provided by the configuration,
      * in the specified namespace/project
      */
-    private void cleanUpBuild(String nameSpace){
+    private void cleanUpBuild(String namespace){
         println 'Removing all objects created by the buildConfig...'
 
         // deletes all resources labelled as app-env=mylabel
-        oc(['delete', 'all', '-l', "env-name=${config.app.build.name}", '-n', "${nameSpace}"])
+        oc(['delete', 'all', '-l', "env-name=${config.app.build.name}", '-n', "${namespace}"])
 
         // removes tags in shared imagestreams corresponfing to the build
-        removeTagsFromSharedImageStreams(nameSpace)
+        removeTagsFromSharedImageStreams(namespace)
     }
 
     /*
      * Removes all the objects created by the deployment config provided by the configuration,
      * in the specified namespace/project
      */
-    private void cleanUpDeployment(String nameSpace){
+    private void cleanUpDeployment(String namespace){
         println 'Removing all objects created by the deploymentConfig...'
 
         // deletes all resources labelled with app-env=mylabel
-        oc(['delete', 'all', '-l', "env-name=${config.app.deployment.name}", '-n', "${nameSpace}"])
+        oc(['delete', 'all', '-l', "env-name=${config.app.deployment.name}", '-n', "${namespace}"])
 
         // removes secret, configmap, pvc labelled with app-env=mylabel
-        oc(['delete', 'secret,configmap,pvc', '-l', "env-name=${config.app.deployment.name}", '-n', "${nameSpace}"])
+        oc(['delete', 'secret,configmap,pvc', '-l', "env-name=${config.app.deployment.name}", '-n', "${namespace}"])
+
+        // TODO: purge istags older than last 5
     }
 
     public void cleanup(){

@@ -37,8 +37,7 @@
                     "description": "Python Base Image"
                 },
                 "labels": {
-                    "shared": "true",
-                    "base-image": "true"
+                    "shared": "true"
                 }
             },
             "spec": {
