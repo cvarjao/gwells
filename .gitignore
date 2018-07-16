@@ -127,6 +127,12 @@ functional-tests/.classpath
 functional-tests/bin
 functional-tests/src/test/groovy/testtamplet.txt
 
+# devops
+devops/.idea
+devops/.settings
+devops/.classpath
+devops/.project
+
 # Custom GW
 activate
 x.sh

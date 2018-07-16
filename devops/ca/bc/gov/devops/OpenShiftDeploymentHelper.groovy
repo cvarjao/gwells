@@ -13,8 +13,8 @@ class OpenShiftDeploymentHelper extends OpenShiftHelper{
 
     private List loadDeploymentTemplates(){
         Map parameters =[
-                'NAME_SUFFIX':config.app.build.suffix,
-                'ENV_NAME': config.app.build.name,
+                'NAME_SUFFIX':config.app.deployment.suffix,
+                'ENV_NAME': config.app.deployment.name,
                 'BUILD_ENV_NAME': config.app.build.name
         ]
         return loadTemplates(config, config.app.deployment, parameters)

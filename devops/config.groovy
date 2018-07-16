@@ -1,14 +1,6 @@
 app {
     name = 'gwells'
     version = 'snapshot'
-    templates {
-        build  = [
-          ['file':'../openshift/backend.bc.json']
-        ]
-        deployment = [
-            ['file':'../openshift/backend.dc.json']
-        ]
-    }
 
     git {
         workDir = ['git', 'rev-parse', '--show-toplevel'].execute().text.trim()
@@ -19,36 +11,52 @@ app {
     }
 
     build {
-        name = 'pr-697'
-        version = '697'
-        prefix = 'gwells-'
-        suffix = '-697'
+        name = "pr-${app.git.changeId}"
+        prefix = "${app.name}-"
+        suffix = "-${app.git.changeId}"
         namespace = 'csnr-devops-lab-tools'
         timeoutInSeconds = 60*20 // 20 minutes
         templates = [
+                ['file':'../openshift/postgresql.bc.json'],
                 ['file':'../openshift/backend.bc.json']
         ]
     }
 
     deployment {
-        name = 'pr-697'
-        version = '697'
-        prefix = 'gwells-'
-        suffix = '-697'
+        TARGET_ENV_NAME = 'dev'
+        name = "pr-${app.git.changeId}"
+        prefix = "${app.name}-"
+        suffix = "-${app.git.changeId}"
         namespace = 'csnr-devops-lab-deploy'
         timeoutInSeconds = 60*20 // 20 minutes
         templates = [
+                ['file':'../openshift/postgresql.dc.json',
+                'params':[
+                    'DATABASE_SERVICE_NAME':"gwells-pgsql${app.deployment.suffix}",
+                    'IMAGE_STREAM_NAMESPACE':'',
+                    'IMAGE_STREAM_NAME':"gwells-postgresql${app.deployment.suffix}",
+                    'IMAGE_STREAM_VERSION':"${app.deployment.name}",
+                    'POSTGRESQL_DATABASE':'gwells',
+                    'VOLUME_CAPACITY':"${app.env[app.deployment.TARGET_ENV_NAME]?.params?.DB_PVC_SIZE?:'1Gi'}"
+                    ]
+                ],
                 ['file':'../openshift/backend.dc.json']
         ]
     }
-}
 
-environments {
-    dev {
-        app{
-            deployment {
-                namespace = 'csnr-devops-lab-deploy'
-            }
-        }
-    }
+    env: [
+        'dev':[:],
+        'test':[
+            'params':[
+                'host':'gwells-test.pathfinder.gov.bc.ca',
+                'DB_PVC_SIZE':'5Gi'
+            ]
+        ],
+        'prod':[
+            'params':[
+                'host':'gwells-prod.pathfinder.gov.bc.ca',
+                'DB_PVC_SIZE':'5Gi'
+            ]
+        ]
+    ]
 }

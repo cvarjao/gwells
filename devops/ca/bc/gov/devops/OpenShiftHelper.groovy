@@ -60,9 +60,15 @@ class OpenShiftHelper{
 
             templateObject.parameters.each { param ->
                 String name = param.name
-                String value=parameters[name]?:''
+                String value = null
+                if(template?.params != null){
+                    value = template?.params[name]
+                }
+                value = parameters[name]?:value
 
-                params.addAll(['-p', "${name}=${value}"])
+                if(value != null){
+                    params.addAll(['-p', "${name}=${value}"])
+                }
             }
 
             Map ocRet=ocProcess(templateObject, params)
@@ -176,6 +182,7 @@ class OpenShiftHelper{
         }
         return ret
     }
+
     public static Map ocGet(List args){
         List _args = ['get'] + args + ['-o', 'json']
         Map ret=oc(_args)
@@ -184,8 +191,6 @@ class OpenShiftHelper{
         }
         return null
     }
-
-
 
     public static Map ocProcess(Map template, List args){
         List _args = ['oc', 'process', '-f', '-', '-o', 'json'] + args 
@@ -221,6 +226,7 @@ class OpenShiftHelper{
     public static def toJson(String jsonAsText){
         return new groovy.json.JsonSlurper().parseText(jsonAsText)
     }
+
     /*
     same output as:
        echo 'test content' | git hash-object --stdin --no-filters
