@@ -1,7 +1,5 @@
 
-package ca.bc.gov.devops
-
-import ca.bc.gov.devops.OpenShiftHelper
+package ca.bc.gov.devops.helpers
 
 class OpenShiftBuildHelper extends OpenShiftHelper{
     def config

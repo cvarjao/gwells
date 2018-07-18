@@ -1,5 +1,5 @@
 
-package ca.bc.gov.devops
+package ca.bc.gov.devops.helpers
 
 class OpenShiftDeploymentHelper extends OpenShiftHelper{
     def config

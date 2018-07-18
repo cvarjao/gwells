@@ -1,3 +1,5 @@
+package ca.bc.gov.devops.scripts
+
 app {
     name = 'gwells'
     version = 'snapshot'
@@ -37,26 +39,40 @@ app {
                     'IMAGE_STREAM_NAME':"gwells-postgresql${app.deployment.suffix}",
                     'IMAGE_STREAM_VERSION':"${app.deployment.name}",
                     'POSTGRESQL_DATABASE':'gwells',
-                    'VOLUME_CAPACITY':"${app.env[app.deployment.TARGET_ENV_NAME]?.params?.DB_PVC_SIZE?:'1Gi'}"
+                    'VOLUME_CAPACITY':"${VOLUME_CAPACITY?:'1Gi'}",
+                    'HOST':"${HOST?:''}"
                     ]
                 ],
                 ['file':'../openshift/backend.dc.json']
         ]
     }
 
-    env: [
-        'dev':[:],
-        'test':[
-            'params':[
-                'host':'gwells-test.pathfinder.gov.bc.ca',
-                'DB_PVC_SIZE':'5Gi'
-            ]
-        ],
-        'prod':[
-            'params':[
-                'host':'gwells-prod.pathfinder.gov.bc.ca',
-                'DB_PVC_SIZE':'5Gi'
-            ]
-        ]
-    ]
+    environments {
+        dev {
+                deployment {
+                    namespace = 'dev-deployment'
+                }
+        }
+        test {
+                deployment {
+                    namespace = 'test-deployment'
+                }
+        }
+    }
+
+    // env: [
+    //     'dev':[:],
+    //     'test':[
+    //         'params':[
+    //             'host':'gwells-test.pathfinder.gov.bc.ca',
+    //             'DB_PVC_SIZE':'5Gi'
+    //         ]
+    //     ],
+    //     'prod':[
+    //         'params':[
+    //             'host':'gwells-prod.pathfinder.gov.bc.ca',
+    //             'DB_PVC_SIZE':'5Gi'
+    //         ]
+    //     ]
+    // ]
 }

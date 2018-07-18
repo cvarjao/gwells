@@ -1,0 +1,24 @@
+plugins {
+    id 'groovy'
+}
+
+group 'ca.bc.gov.devops'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'org.codehaus.groovy:groovy-all:2.5.1'
+
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDirs = ["src/main/resources"]
+            includes = ["**/*.groovy"]
+        }
+    }
+}

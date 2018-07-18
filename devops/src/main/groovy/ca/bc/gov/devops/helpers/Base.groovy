@@ -1,9 +1,6 @@
-package ca.bc.gov.devops
+package ca.bc.gov.devops.helpers
 
 import static OpenShiftHelper.oc
-import static OpenShiftHelper.ocProcess
-import static OpenShiftHelper.gitHashAsBlobObject
-import static OpenShiftHelper.getVerboseLevel
 
 abstract class Base extends Script {
     static String CMD_OC='oc'

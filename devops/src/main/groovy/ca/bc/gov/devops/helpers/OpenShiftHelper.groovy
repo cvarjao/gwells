@@ -1,4 +1,4 @@
-package ca.bc.gov.devops
+package ca.bc.gov.devops.helpers
 
 class OpenShiftHelper{
     protected Map cache = [:] //Indexed by key
