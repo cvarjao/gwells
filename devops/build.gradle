@@ -18,8 +18,9 @@ dependencies {
 sourceSets {
     main {
         resources {
-            srcDirs = ["src/main/resources"]
+            srcDirs = ["src/main/groovy", "src/main/resources"]
             includes = ["**/*.groovy"]
         }
+
     }
 }
