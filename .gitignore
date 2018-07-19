@@ -166,3 +166,4 @@ sonar-runner/.classpath
 # Exceptions
 !app/*/fixtures/*.gz
 .idea
+/devops/out
