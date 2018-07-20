@@ -49,13 +49,8 @@ class OpenShiftHelper{
         templates.each { Map template ->
             if (getVerboseLevel() >= 2) println template.file
 
-            //Determine path to use when resolving templates
-            @SourceURI URI sourceUri
-            Path currentPath = Paths.get(sourceUri)
-            String projectPath = currentPath.toString().split("src")[0]
-
             //Load Template
-            Map templateObject = new groovy.json.JsonSlurper().parseFile(new File(projectPath + template.file), 'UTF-8')
+            Map templateObject = new groovy.json.JsonSlurper().parseFile(new File(template.file), 'UTF-8')
             //Normalize template and calculate hash
             templateObject.objects.each { Map it ->
                 it.metadata.labels=it.metadata.labels?:[:]
