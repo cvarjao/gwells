@@ -3,20 +3,12 @@ package ca.bc.gov.devops.scripts
 app {
     name = 'gwells'
     version = 'snapshot'
-
-    git {
-        workDir = ['git', 'rev-parse', '--show-toplevel'].execute().text.trim()
-        uri = ['git', 'config', '--get', 'remote.origin.url'].execute().text.trim()
-        commit = ['git', 'rev-parse', 'HEAD'].execute().text.trim()
-        ref = ['bash','-c', 'git config branch.`git name-rev --name-only HEAD`.merge'].execute().text.trim()
-        changeId = '697'
-    }
+    environments = ['dev', 'dev']
 
     build {
-        name = "pr-${app.git.changeId}"
+        name = "pr-${CHANGE_ID}"
         prefix = "${app.name}-"
-        suffix = "-${app.git.changeId}"
-        namespace = 'csnr-devops-lab-tools'
+        suffix = "-${CHANGE_ID}"
         timeoutInSeconds = 60*20 // 20 minutes
         templates = [
                 ['file':'../openshift/postgresql.bc.json'],
@@ -25,11 +17,9 @@ app {
     }
 
     deployment {
-        TARGET_ENV_NAME = 'dev'
-        name = "pr-${app.git.changeId}"
+        name = "pr-${CHANGE_ID}"
         prefix = "${app.name}-"
-        suffix = "-${app.git.changeId}"
-        namespace = 'csnr-devops-lab-deploy'
+        suffix = "-${CHANGE_ID}"
         timeoutInSeconds = 60*20 // 20 minutes
         templates = [
                 ['file':'../openshift/postgresql.dc.json',
@@ -47,32 +37,15 @@ app {
         ]
     }
 
+    // Add environment-specific overrides in this section
     environments {
         dev {
-                deployment {
-                    namespace = 'dev-deployment'
-                }
-        }
-        test {
-                deployment {
-                    namespace = 'test-deployment'
-                }
+            build {
+                namespace = 'csnr-devops-lab-tools'
+            }
+            deployment {
+                namespace = 'csnr-devops-lab-deploy'
+            }
         }
     }
-
-    // env: [
-    //     'dev':[:],
-    //     'test':[
-    //         'params':[
-    //             'host':'gwells-test.pathfinder.gov.bc.ca',
-    //             'DB_PVC_SIZE':'5Gi'
-    //         ]
-    //     ],
-    //     'prod':[
-    //         'params':[
-    //             'host':'gwells-prod.pathfinder.gov.bc.ca',
-    //             'DB_PVC_SIZE':'5Gi'
-    //         ]
-    //     ]
-    // ]
 }
